@@ -7,9 +7,13 @@ mod graph_scorer;
 mod stationary_probabilities;
 mod vertex_degree;
 
-pub use graph_scorer::GraphScorer;
 pub use parent_cardinality::ParentCardinality;
 pub use cluster_cardinality::ClusterCardinality;
+pub use component_cardinality::ComponentCardinality;
+pub use graph_neighborhood::GraphNeighborhood;
+pub use graph_scorer::GraphScorer;
+pub use stationary_probabilities::StationaryProbabilities;
+pub use vertex_degree::VertexDegree;
 
 use std::collections::HashMap;
 use super::Vertex;

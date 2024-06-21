@@ -6,8 +6,6 @@ use abd_clam::{Cluster, PartitionCriteria, Tree, VecDataset};
 use distances::number::Float;
 use distances::Number;
 use rand::SeedableRng;
-use smartcore::linalg::BaseVector;
-
 /// Generate a dataset with the given cardinality and dimensionality.
 pub fn gen_dataset_with_anomaly(
     cardinality: usize,
