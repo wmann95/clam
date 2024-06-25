@@ -1,14 +1,37 @@
 
 use distances::Number;
 
-use crate::PartitionCriteria;
+use crate::{core::space::Space, Cluster, PartitionCriteria, PartitionCriterion};
 
-struct Space {}
+use super::graph_scorers::GraphScorer;
+
+pub enum NormalizationMode{
+    LINEAR,
+    GAUSSIAN,
+    SIGMOID
+}
+
+pub enum VotingMode{
+    Mean,
+    Product,
+    Median,
+    Min,
+    Max,
+    P25,
+    P75
+}
 
 /// The main struct representing CHAODA.
-pub struct CHAODA {}
+pub struct CHAODA<'a, U: Number> {
+    metric_spaces: Vec<Space>,
+    partition_criteria: Option<PartitionCriteria<U>>,
+    selector_scorers: Option<Vec<(Box<dyn PartitionCriterion<U>>, Vec<Box<dyn GraphScorer<'a, U>>>)>>,
+    normalization_mode: Option<NormalizationMode>,
+    use_speed_threshold: Option<bool>,
+    voting_mode: Option<VotingMode>
+}
 
-impl CHAODA{
+impl<'a, U: Number> CHAODA<'a, U>{
     /// Creates and initializes a CHAODA object.
     ///
     ///     Args:
@@ -25,8 +48,22 @@ impl CHAODA{
     ///             - 'sigmoid'.
     ///         use_speed_threshold: Whether to skip slow graph scorers.
     ///         voting_mode: to use to aggregate scores for the ensemble.
-    pub fn new() -> Self {
-        todo!();
+    pub fn new(
+        metric_spaces: Vec<Space>,
+        partition_criteria: Option<PartitionCriteria<U>>,
+        selector_scorers: Option<Vec<(Box<dyn PartitionCriterion<U>>, Vec<Box<dyn GraphScorer<'a, U>>>)>>,
+        normalization_mode: Option<NormalizationMode>,
+        use_speed_threshold: Option<bool>,
+        voting_mode: Option<VotingMode>
+    ) -> Self {
+        Self{
+            metric_spaces,
+            partition_criteria,
+            selector_scorers,
+            normalization_mode,
+            use_speed_threshold,
+            voting_mode
+        }
     }
     
     pub fn build(&self){
@@ -83,3 +120,4 @@ impl SingleSpaceChaoda {
         todo!();
     }
 }
+

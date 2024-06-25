@@ -8,7 +8,7 @@ use super::{ClusterScores, InstanceScores};
 
 
 /// A trait for scoring graphs.
-pub trait GraphScorer<'a, U: Number>: Hash {
+pub trait GraphScorer<'a, U: Number> {
     /// Computes scores for the given graph and returns cluster scores and an array of scores.
     ///
     /// This function is responsible for calculating scores based on the input graph.
