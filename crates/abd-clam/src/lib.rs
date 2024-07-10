@@ -21,6 +21,7 @@ pub mod chaoda;
 mod core;
 pub mod pancakes;
 pub mod utils;
+pub mod clam_bake;
 
 pub use crate::{
     cakes::Cakes,
