@@ -24,17 +24,16 @@ impl ClamBake for f32{
                     .from_path(path)
                     .map_err(|e| e.to_string())?;
                 
-                let out: Result<Vec<Vec<f32>>, String> = 
-                    reader.records()
-                    .into_iter()
-                    .map(|record|{
-                        record.map_err(|e| e.to_string())?
-                            .iter()
-                            .map(|field_result|{
-                                field_result.parse::<f32>().map_err(|e| e.to_string())
-                            }).collect::<Result<Vec<f32>, String>>()
-                    }).collect();
-                out
+                
+                reader.records()
+                .into_iter()
+                .map(|record|{
+                    record.map_err(|e| e.to_string())?
+                        .iter()
+                        .map(|field_result|{
+                            field_result.parse::<f32>().map_err(|e| e.to_string())
+                        }).collect::<Result<Vec<f32>, String>>()
+                }).collect::<Result<Vec<Vec<f32>>, String>>()
             }
         }
         
