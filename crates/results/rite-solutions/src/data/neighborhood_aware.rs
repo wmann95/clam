@@ -7,7 +7,7 @@ use abd_clam::{
 };
 use rayon::prelude::*;
 
-use super::wasserstein;
+use super::wasserstein::{self, wasserstein};
 
 type Fv = FlatVec<Vec<f32>, f32, usize>;
 
@@ -61,28 +61,49 @@ impl NeighborhoodAware {
     }
 
     /// Check if a point is an outlier.
-    pub fn is_outlier<C: Cluster<Vec<f32>, f32, Self>>(&self, root: &C, query: &Vec<f32>, threshold: f32) -> bool {
+    pub fn is_outlier<C: Cluster<Vec<f32>, f32, Self>>(&self, root: &C, query: &Vec<f32>, threshold: Option<f32>) -> bool {
         let alg = abd_clam::cakes::Algorithm::KnnLinear(self.k);
+        
+        let threshold = match threshold{
+            Some(v) => v,
+            None => 0.5f32
+        };
 
         let hits = alg.search(self, root, query);
-        let neighbors_distances = hits
+        let mut neighbors_distances = hits
             .iter()
-            .map(|&(i, _)| self.neighbor_distances(i))
+            .map(|&(i, _)| (i, self.neighbor_distances(i)))
             .collect::<Vec<_>>();
-
+        
+        let avg_wass_dists = neighbors_distances.iter().enumerate().map(|(i, (_, v))|{
+            
+            let neighbors = neighbors_distances.clone();
+            let dists = neighbors.iter().map(|(_, nv)|{
+                wasserstein(v, nv)
+            }).collect::<Vec<f32>>();
+            
+            let out: f32 = abd_clam::utils::mean(&dists);
+            
+            out
+        }).collect::<Vec<_>>();
+        
+        let avg_wass_dist: f32 = abd_clam::utils::mean(&avg_wass_dists);
+        
         // TODO: Compute all-pairs matrix of wasserstein distances among the neighbors' distance distributions.
 
         // TODO: Compute the wasserstein distances for the query
 
         // TODO: Optionally use the threshold to determine if the query is an outlier.
-
-        let distances = hits.iter().map(|&(_, d)| d).collect::<Vec<_>>();
-        // TODO: The rest of this is wrong.
+        
         let wasserstein_distances = neighbors_distances
             .iter()
-            .map(|d| wasserstein::wasserstein(d, &distances))
+            .map(|(_, d)| wasserstein::wasserstein(query, d))
             .collect::<Vec<_>>();
+        
         let mean_wasserstein: f32 = abd_clam::utils::mean(&wasserstein_distances);
+        
+        println!("Average Wasserstein distances among neighbors: {}", avg_wass_dist);
+        println!("Average Wasserstein distance to neighbors: {}", mean_wasserstein);
 
         mean_wasserstein > threshold
     }
