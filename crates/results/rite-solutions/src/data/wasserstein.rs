@@ -1,5 +1,7 @@
 //! 1D Wasserstein distance
 
+use distances::number::Addition;
+
 /// Compute the Wasserstein distance between two 1D distributions.
 ///
 /// Uses Euclidean distance as the ground metric.
@@ -42,7 +44,7 @@ pub fn wasserstein(x: &Vec<f32>, y: &Vec<f32>) -> f32 {
               flow
             };
             
-            work += (flow * (l_index.abs_diff(r_index) as f32)) as f32;
+            work += flow * (l_index as f32 - r_index as f32).abs();
             // println!("Current work: {}", work);
         }
     }

@@ -94,16 +94,23 @@ impl NeighborhoodAware {
         // TODO: Compute the wasserstein distances for the query
 
         // TODO: Optionally use the threshold to determine if the query is an outlier.
+        println!();
+        println!("Query:\n{:?}", query);
+        println!();
         
-        let wasserstein_distances = neighbors_distances
-            .iter()
-            .map(|(_, d)| wasserstein::wasserstein(query, d))
-            .collect::<Vec<_>>();
+        let wasserstein_distances = hits.iter().map(|(i, f)|{
+            let t = self.data.get(*i);
+            let out = wasserstein(query, t);
+            println!("Algorithmic Dist: {}", f);
+            println!("Wasserstein dist: {}", out);
+            out
+        }).collect::<Vec<_>>();
         
         let mean_wasserstein: f32 = abd_clam::utils::mean(&wasserstein_distances);
         
-        println!("Average Wasserstein distances among neighbors: {}", avg_wass_dist);
-        println!("Average Wasserstein distance to neighbors: {}", mean_wasserstein);
+        println!();
+        println!("{avg_wass_dist}");
+        println!("{mean_wasserstein}");
 
         mean_wasserstein > threshold
     }
