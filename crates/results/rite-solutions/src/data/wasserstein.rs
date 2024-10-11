@@ -1,22 +1,22 @@
 //! 1D Wasserstein distance
 
-use distances::number::Addition;
+use distances::{number::{Addition, Float}, Number};
 
 /// Compute the Wasserstein distance between two 1D distributions.
 ///
 /// Uses Euclidean distance as the ground metric.
 ///
 /// See the [SciPy documentation](https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.wasserstein_distance.html) for more information.
-pub fn wasserstein(x: &Vec<f32>, y: &Vec<f32>) -> f32 {
-    let mut work = 0f32;
+pub fn wasserstein<T: Number, U: Float>(x: &Vec<T>, y: &Vec<T>) -> U {
+    let mut work = U::ZERO;
     
     //IDEA: iterate through one side, subtract value from first POSITIVE value of other
     
-    let mut left = x.iter().map(|f| *f).enumerate().collect::<Vec<(usize, f32)>>();
-    let mut right = y.iter().map(|f| *f).enumerate().collect::<Vec<(usize, f32)>>();
+    let mut left = x.iter().map(|f| *f).enumerate().collect::<Vec<(usize, T)>>();
+    let mut right = y.iter().map(|f| *f).enumerate().collect::<Vec<(usize, T)>>();
     
     while let Some((l_index, mut l_val)) = left.pop(){
-        while l_val.is_normal() {
+        while l_val.as_f64().is_normal() {
             let (r_index, mut r_val) = match right.pop(){
               Some(v) => v,
               None => break
@@ -24,10 +24,10 @@ pub fn wasserstein(x: &Vec<f32>, y: &Vec<f32>) -> f32 {
             
             let flow = if l_val <= r_val{
               let flow = l_val;
-              l_val = 0.;
+              l_val = T::ZERO;
               r_val -= flow;
               
-              if r_val.is_normal(){
+              if r_val.as_f64().is_normal(){
                   right.push((r_index, r_val));
               }
               
@@ -44,7 +44,7 @@ pub fn wasserstein(x: &Vec<f32>, y: &Vec<f32>) -> f32 {
               flow
             };
             
-            work += flow * (l_index as f32 - r_index as f32).abs();
+            work += U::from(flow) * (U::from(l_index) - U::from(r_index)).abs();
             // println!("Current work: {}", work);
         }
     }
@@ -66,15 +66,15 @@ mod wasserstein_tests{
   
   #[test]
   fn wasserstein_test(){
-    let mut dirt = vec![0.; K];
-    let mut holes = vec![0.; K];
+    let mut dirt: Vec<f32> = vec![0.; K];
+    let mut holes: Vec<f32> = vec![0.; K];
     
     dirt = dirt.iter().map(|_| thread_rng().r#gen::<f32>()).collect();
     holes = holes.iter().map(|_| thread_rng().r#gen::<f32>()).collect();
     
     let t = std::time::Instant::now();
     
-    let res = wasserstein(&dirt, &holes);
+    let res: f32 = wasserstein(&dirt, &holes);
     
     let time = t.elapsed().as_secs_f64();
     
@@ -97,7 +97,7 @@ mod wasserstein_tests{
     let mut dirt = vec![0.; K];
     dirt = dirt.iter().map(|_| thread_rng().r#gen::<f32>()).collect();
     
-    let res = wasserstein(&dirt, &dirt);
+    let res: f32 = wasserstein(&dirt, &dirt);
     
     assert_eq!(res, 0.);
   }
@@ -110,8 +110,8 @@ mod wasserstein_tests{
     dirt = dirt.iter().map(|_| thread_rng().r#gen::<f32>()).collect();
     holes = holes.iter().map(|_| thread_rng().r#gen::<f32>()).collect();
     
-    let res1 = wasserstein(&dirt, &holes);
-    let res2 = wasserstein(&holes, &dirt);
+    let res1: f32 = wasserstein(&dirt, &holes);
+    let res2: f32 = wasserstein(&holes, &dirt);
     
     assert_eq!(res1, res2);
   }
@@ -127,9 +127,9 @@ mod wasserstein_tests{
     v2 = v2.iter().map(|_| thread_rng().r#gen::<f32>()).collect();
     v3 = v3.iter().map(|_| thread_rng().r#gen::<f32>()).collect();
     
-    let d_v1_v3 = wasserstein(&v1, &v3);
-    let d_v1_v2 = wasserstein(&v1, &v2);
-    let d_v2_v3 = wasserstein(&v2, &v3);
+    let d_v1_v3: f32 = wasserstein(&v1, &v3);
+    let d_v1_v2: f32 = wasserstein(&v1, &v2);
+    let d_v2_v3: f32 = wasserstein(&v2, &v3);
     
     assert!(d_v1_v3 <= d_v1_v2 + d_v2_v3);
   }
