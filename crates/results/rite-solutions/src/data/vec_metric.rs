@@ -3,7 +3,7 @@
 use abd_clam::Metric;
 use distances::{number::Float, Number};
 
-use super::wasserstein::wasserstein;
+use super::wasserstein::{direct_flow, wasserstein};
 
 #[derive(clap::ValueEnum, Debug, Clone)]
 pub enum VecMetric {
@@ -22,6 +22,10 @@ pub enum VecMetric {
     /// The Wasserstein distance.
     #[clap(name = "wasserstein")]
     Wasserstein,
+    
+    /// The Wasserstein distance.
+    #[clap(name = "wasserstein")]
+    DirectFlow,
 }
 
 impl VecMetric {
@@ -32,7 +36,8 @@ impl VecMetric {
             Self::Euclidean => |x: &Vec<T>, y: &Vec<T>| distances::vectors::euclidean::<T, U>(x, y),
             Self::Manhattan => |x: &Vec<T>, y: &Vec<T>| U::from(distances::vectors::manhattan::<T>(x, y)),
             Self::Cosine => |x: &Vec<T>, y: &Vec<T>| distances::vectors::cosine::<T, U>(x, y),
-            Self::Wasserstein => |x: &Vec<T>, y: &Vec<T>| U::from(wasserstein::<T, U>(x, y))
+            Self::Wasserstein => |x: &Vec<T>, y: &Vec<T>| U::from(wasserstein::<T, U>(x, y)),
+            Self::DirectFlow => |x: &Vec<T>, y: &Vec<T>| U::from(direct_flow::<T, U>(x, y))
         };
         Metric::new(distance_fn, false)
     }

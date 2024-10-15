@@ -10,10 +10,12 @@ mod vec_metric;
 pub mod wasserstein;
 
 pub use gen_random::gen_random;
+#[allow(unused_imports)]
 pub use neighborhood_aware::NeighborhoodAware;
 pub use vec_metric::VecMetric;
 
 /// Read data from the given path or generate random data.
+#[allow(dead_code)]
 pub fn read_or_generate(
     path: Option<String>,
     metric: &VecMetric,

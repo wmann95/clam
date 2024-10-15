@@ -17,6 +17,7 @@ pub struct NeighborhoodAware {
     k: usize,
 }
 
+#[allow(dead_code)]
 impl NeighborhoodAware {
     /// Create a new `NeighborhoodAware` `Dataset`.
     ///
@@ -29,9 +30,7 @@ impl NeighborhoodAware {
             .instances()
             .iter()
             .enumerate()
-            .map(|(i, _)| {
-                // get all points, find distances, return a Vec<(usize, f32)>
-            })
+            .map(|(_, query)| alg.search(data, root, query))
             .zip(data.metadata().iter())
             .map(|(h, &i)| (i, h))
             .collect();
@@ -82,8 +81,7 @@ impl NeighborhoodAware {
         Self { data, std, k }
     }
 
-    /// Check if a point is an outlier.
-    pub fn is_outlier<C: Cluster<Vec<f32>, f32, Self>>(&self, root: &C, query: &Vec<f32>) -> bool {
+    pub fn outlier_score<C: Cluster<Vec<f32>, f32, Self>>(&self, root: &C, query: &Vec<f32>) -> f32 {
         let alg = abd_clam::cakes::Algorithm::KnnLinear(self.k);
         
         let hits = alg.search(self, root, query);
@@ -97,31 +95,27 @@ impl NeighborhoodAware {
             .collect::<Vec<_>>();
         
         
-        let neighbors_variance: f64 = abd_clam::utils::mean(&neighbors_distances);
+        let neighbors_variance: f32 = abd_clam::utils::mean(&neighbors_distances);
         
-        // TODO: Compute all-pairs matrix of wasserstein distances among the neighbors' distance distributions.
-
-        // TODO: Compute the wasserstein distances for the query
-
-        // TODO: Optionally use the threshold to determine if the query is an outlier.
-        
-        let wasserstein_distances = hits.iter().map(|(i, f)|{
+        let wasserstein_distances = hits.iter().map(|(i, _)|{
             let t = self.data.get(*i);
-            let out: f64 = wasserstein(query, t);
+            let out: f32 = wasserstein(query, t);
             out
         }).collect::<Vec<_>>();
         
-        let mean_wasserstein: f64 = abd_clam::utils::mean(&wasserstein_distances);
+        let mean_wasserstein: f32 = abd_clam::utils::mean(&wasserstein_distances);
         
         let neighbors_deviation = neighbors_variance.sqrt();
         let deviation = mean_wasserstein.sqrt();
         
-        println!();
-        println!("{neighbors_deviation}");
-        println!("{deviation}");
-        println!("{}", self.std);
+        deviation / neighbors_deviation
+    }
+    
+    /// Check if a point is an outlier.
+    pub fn is_outlier<C: Cluster<Vec<f32>, f32, Self>>(&self, root: &C, query: &Vec<f32>) -> bool {
+        let res = self.outlier_score(root, query);
 
-        deviation > neighbors_deviation
+        res > 2.0
     }
 
     /// Get the distances to the `k` nearest neighbors of a point.
