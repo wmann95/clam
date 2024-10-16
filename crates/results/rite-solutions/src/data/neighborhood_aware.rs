@@ -5,6 +5,8 @@ use abd_clam::{
 };
 use rayon::prelude::*;
 
+use crate::data::wasserstein;
+
 use super::wasserstein::wasserstein;
 
 type Fv = FlatVec<Vec<f32>, f32, usize>;
@@ -13,7 +15,6 @@ type Fv = FlatVec<Vec<f32>, f32, usize>;
 #[allow(clippy::type_complexity)]
 pub struct NeighborhoodAware {
     data: FlatVec<Vec<f32>, f32, (usize, Vec<(usize, f32)>)>,
-    std: f32,
     k: usize,
 }
 
@@ -35,21 +36,11 @@ impl NeighborhoodAware {
             .map(|(h, &i)| (i, h))
             .collect();
         
-        let variance = results.iter().map(|(_, v)|{
-            let r = v.iter().map(|&(_, d)| d).collect::<Vec<f32>>();
-            let out: f32 = mean(&r);
-            out
-        }).collect::<Vec<f32>>();
-        
-        let variance: f32 = mean(&variance);
-        
-        let std = variance.sqrt() as f32;
-
         let data = data
             .clone()
             .with_metadata(results)
             .unwrap_or_else(|e| unreachable!("We created the correct size for neighborhood aware data: {e}"));
-        Self { data, std, k }
+        Self { data, k }
     }
 
     /// Parallel version of `new`.
@@ -63,59 +54,64 @@ impl NeighborhoodAware {
             .zip(data.metadata().par_iter())
             .map(|(h, &i)| (i, h))
             .collect();
-
-        let variance = results.par_iter().map(|(_, v)|{
-            let r = v.par_iter().map(|&(_, d)| d as f64).collect::<Vec<f64>>();
-            let out: f64 = mean(&r);
-            out
-        }).collect::<Vec<f64>>();
-        
-        let variance: f64 = mean(&variance);
-        
-        let std = variance.sqrt() as f32;
         
         let data = data
             .clone()
             .with_metadata(results)
             .unwrap_or_else(|e| unreachable!("We created the correct size for neighborhood aware data: {e}"));
-        Self { data, std, k }
+        Self { data, k }
     }
-
-    pub fn outlier_score<C: Cluster<Vec<f32>, f32, Self>>(&self, root: &C, query: &Vec<f32>) -> f32 {
+    
+    /// Check if a point is an outlier.
+    pub fn is_outlier<C: Cluster<Vec<f32>, f32, Self>>(&self, root: &C, query: &Vec<f32>) -> bool {
         let alg = abd_clam::cakes::Algorithm::KnnLinear(self.k);
         
         let hits = alg.search(self, root, query);
         let neighbors_distances = hits
             .iter()
             .map(|&(i, _)| {
-                let dists = self.neighbor_distances(i);
-                let out: f32 = abd_clam::utils::mean(&dists);
-                out
+                self.neighbor_distances(i)
             })
             .collect::<Vec<_>>();
         
+        let dist_mat = neighbors_distances.iter().map(|v| {
+            neighbors_distances.iter().map(|q| wasserstein(v, q)).collect::<Vec<f32>>()
+        }).collect::<Vec<Vec<f32>>>();
         
-        let neighbors_variance: f32 = abd_clam::utils::mean(&neighbors_distances);
+        for a in &dist_mat{
+            println!("{:?}", *a);
+        }
         
-        let wasserstein_distances = hits.iter().map(|(i, _)|{
-            let t = self.data.get(*i);
-            let out: f32 = wasserstein(query, t);
-            out
-        }).collect::<Vec<_>>();
+        let query_distances = hits.iter().map(|&(_, d)| d).collect::<Vec<_>>();
         
-        let mean_wasserstein: f32 = abd_clam::utils::mean(&wasserstein_distances);
+        let wasserstein_distances = neighbors_distances.iter().map(|v|{
+            wasserstein(&query_distances, v)
+        }).collect::<Vec<f32>>();
         
-        let neighbors_deviation = neighbors_variance.sqrt();
-        let deviation = mean_wasserstein.sqrt();
+        println!();
+        println!("{:?}", wasserstein_distances);
         
-        deviation / neighbors_deviation
-    }
-    
-    /// Check if a point is an outlier.
-    pub fn is_outlier<C: Cluster<Vec<f32>, f32, Self>>(&self, root: &C, query: &Vec<f32>) -> bool {
-        let res = self.outlier_score(root, query);
-
-        res > 2.0
+        // TODO: What am I using the dist_mat for? Am I comparing wasserstein_distances to the distances there?
+        //       Am I to find the max of each of the inner arrays, then comparing that to wasserstein_distances?
+        //       What is the intended means to collapse this into a single result? Is it just that if the
+        //       difference between 
+        
+        // guessing here
+        
+        let max_dist = dist_mat.iter().flatten().fold(f32::NEG_INFINITY, |out, f|{
+            let f = f.clone();
+            if out < f{
+                f
+            }
+            else{
+                out
+            }
+        });
+        
+        println!("{}", max_dist);
+        println!();
+        
+        wasserstein_distances.iter().filter(|f| **f > max_dist).collect::<Vec<_>>().len() > 0
     }
 
     /// Get the distances to the `k` nearest neighbors of a point.
@@ -124,9 +120,7 @@ impl NeighborhoodAware {
     // }
     
     fn neighbor_distances(&self, i: usize) -> Vec<f32> {
-        self.data.metadata()[i].1.iter().map(|&(j, _)| {
-            wasserstein(self.get(i), self.get(j))
-        }).collect()
+        self.data.metadata()[i].1.iter().map(|&(_, d)| d).collect()
     }
 }
 
@@ -148,7 +142,6 @@ impl Dataset<Vec<f32>, f32> for NeighborhoodAware {
     fn with_name(self, name: &str) -> Self {
         Self {
             data: self.data.with_name(name),
-            std: self.std,
             k: self.k,
         }
     }
