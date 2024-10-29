@@ -7,7 +7,7 @@ edition = "2021"
 clap = { version = "4.5.16", features = ["derive"] }
 ftlog = { version = "0.2.0" }
 distances = { workspace = true }
-stringzilla = "3.9.5"
+# stringzilla = "3.9.5"
 bio = "2.0.1"
 rand = { workspace = true }
 abd-clam = { workspace = true, features = ["csv"] }

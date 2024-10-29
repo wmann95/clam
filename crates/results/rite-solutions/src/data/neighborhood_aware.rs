@@ -1,11 +1,14 @@
 //! A `Dataset` in which every point stores the distances to its `k` nearest neighbors.
 
+use core::f32;
+
 use abd_clam::{
-    cluster::ParCluster, dataset::{metric_space::ParMetricSpace, ParDataset}, utils::mean, Cluster, Dataset, FlatVec, Metric, MetricSpace, Permutable
+    cluster::ParCluster, dataset::{metric_space::ParMetricSpace, ParDataset}, utils::{mean, standard_deviation}, Cluster, Dataset, FlatVec, Metric, MetricSpace, Permutable
 };
+use distances::number::Addition;
 use rayon::prelude::*;
 
-use crate::data::wasserstein;
+use crate::{data::wasserstein, utils::{normalize_distances, normalize_distribution}};
 
 use super::wasserstein::wasserstein;
 
@@ -62,11 +65,15 @@ impl NeighborhoodAware {
         Self { data, k }
     }
     
-    /// Check if a point is an outlier.
-    pub fn is_outlier<C: Cluster<Vec<f32>, f32, Self>>(&self, root: &C, query: &Vec<f32>) -> bool {
+    
+    
+    pub fn outlier_score<C: Cluster<Vec<f32>, f32, Self>>(&self, root: &C, query: &Vec<f32>) -> f32 {
         let alg = abd_clam::cakes::Algorithm::KnnLinear(self.k);
         
+        // find the k-nearest neighbors of this query point.
         let hits = alg.search(self, root, query);
+        
+        // for each of the neighbors, retrieve THEIR k-nearest neighbors
         let neighbors_distances = hits
             .iter()
             .map(|&(i, _)| {
@@ -74,45 +81,131 @@ impl NeighborhoodAware {
             })
             .collect::<Vec<_>>();
         
-        let dist_mat = neighbors_distances.iter().map(|v| {
-            neighbors_distances.iter().map(|q| wasserstein(v, q)).collect::<Vec<f32>>()
-        }).collect::<Vec<Vec<f32>>>();
+        // Get the normalized distances of each of the neighbors...
+        // produces incoherent results.
+        /*
+        let neighbors_distances_normalized = neighbors_distances.iter()
+            .map(|v| normalize_distances(v))
+            .collect::<Vec<_>>();
+         */
         
-        for a in &dist_mat{
-            println!("{:?}", *a);
-        }
+        // make a vector from the query neighbors consisting only
+        // of floats, without the otherwise included neighbor index.
+        let query_distances = hits.iter()
+            .map(|&(_, f)| f)
+            .collect::<Vec<_>>();
         
-        let query_distances = hits.iter().map(|&(_, d)| d).collect::<Vec<_>>();
+        // Same as previous normalized distances.
+        //let query_distances_normalized = normalize_distances(&query_distances);
         
-        let wasserstein_distances = neighbors_distances.iter().map(|v|{
-            wasserstein(&query_distances, v)
-        }).collect::<Vec<f32>>();
+        // Normalize the query distances into a vector with range of
+        // 0..1 which sums to 1.0
+        let query_distribution_normalized = normalize_distribution(&query_distances);
         
-        println!();
-        println!("{:?}", wasserstein_distances);
+        // Normalize each of the neighbor distance vectors the same way
+        // as the query.
+        let distance_distribution_mat = neighbors_distances.iter()
+            .map(|v| normalize_distribution(v))
+            .collect::<Vec<Vec<f32>>>();
         
-        // TODO: What am I using the dist_mat for? Am I comparing wasserstein_distances to the distances there?
-        //       Am I to find the max of each of the inner arrays, then comparing that to wasserstein_distances?
-        //       What is the intended means to collapse this into a single result? Is it just that if the
-        //       difference between 
+        // Find the Wasserstein distance between each of the neighbors'
+        // normalized neighbor distances.
+        let dist_distrib_wass_mat = distance_distribution_mat.iter()
+            .map(|v| {
+                distance_distribution_mat.iter()
+                .map(|q| wasserstein(&v, q))
+                .collect::<Vec<f32>>()
+            })
+            .collect::<Vec<Vec<f32>>>();
         
-        // guessing here
+        // find the Wasserstein distance between the query and its
+        // neighbors.
+        let query_wass = distance_distribution_mat.iter()
+            .map(|v| wasserstein(&query_distribution_normalized, v))
+            .collect::<Vec<f32>>();
         
-        let max_dist = dist_mat.iter().flatten().fold(f32::NEG_INFINITY, |out, f|{
-            let f = f.clone();
-            if out < f{
-                f
-            }
-            else{
-                out
-            }
-        });
+        let dist_distrib_means = dist_distrib_wass_mat.iter()
+            .map(|v| mean(&v))
+            .collect::<Vec<f32>>();
         
-        println!("{}", max_dist);
-        println!();
+        let dist_distrib_stds = dist_distrib_wass_mat.iter()
+            .map(|v| {
+                standard_deviation(v)
+            })
+            .collect::<Vec<f32>>();
         
-        wasserstein_distances.iter().filter(|f| **f > max_dist).collect::<Vec<_>>().len() > 0
+        let zipped_means_stds = dist_distrib_means.iter()
+            .zip(dist_distrib_stds.iter())
+            .collect::<Vec<(&f32, &f32)>>();
+        
+        let query_mean: f32 = mean(&query_wass);
+        
+        let out = zipped_means_stds.iter()
+            .map(|(&mean, &std)|{
+                let dist_between_means = mean.abs_diff(query_mean);
+                let var = dist_between_means / std;
+                println!("{var}");
+                var
+            })
+            .collect::<Vec<f32>>();
+        
+        let out_mean: f32 = mean(&out);
+        
+        // println!("{}", out_mean);
+        // println!();
+        
+        // let r1 = dist_mat[0].clone();
+        
+        // let variations = dist_mat[1..].iter()
+        //     .fold(r1, |acc, v|{
+        //         acc.iter().zip(v.iter()).map(|(a, b)| a + b).collect::<Vec<_>>()
+        //     }).iter()
+        //     .map(|&f| (f / (dist_mat.len() as f32)).sqrt())
+        //     .collect::<Vec<_>>();
+        
+        // println!("{:?}", variations);
+        // println!();
+        
+        
+        // let wasserstein_distances = neighbors_distances_normalized.iter().map(|v|{
+        //     wasserstein(&query_distances_normalized, v)
+        // }).collect::<Vec<f32>>();
+        
+        // let out = wasserstein_distances.iter().zip(variations.iter()).map(|(&a, &b)|{
+        //     a.abs_diff(b).sqrt()
+        // }).collect::<Vec<_>>();
+        
+        // // println!("{:?}", out);
+        
+        out.iter().sum::<f32>().sqrt()
     }
+    
+    /// Check if a point is an outlier.
+    // pub fn is_outlier<C: Cluster<Vec<f32>, f32, Self>>(&self, root: &C, query: &Vec<f32>) -> bool {
+        
+        
+    //     // TODO: What am I using the dist_mat for? Am I comparing wasserstein_distances to the distances there?
+    //     //       Am I to find the max of each of the inner arrays, then comparing that to wasserstein_distances?
+    //     //       What is the intended means to collapse this into a single result? Is it just that if the
+    //     //       difference between 
+        
+    //     // guessing here
+        
+    //     // let max_dist = dist_mat.iter().flatten().fold(f32::NEG_INFINITY, |out, f|{
+    //     //     let f = f.clone();
+    //     //     if out < f{
+    //     //         f
+    //     //     }
+    //     //     else{
+    //     //         out
+    //     //     }
+    //     // });
+        
+    //     // println!("{}", max_dist);
+    //     // println!();
+        
+    //     // wasserstein_distances.iter().filter(|f| **f > max_dist).collect::<Vec<_>>().len() > 0
+    // }
 
     /// Get the distances to the `k` nearest neighbors of a point.
     // fn neighbor_distances(&self, i: usize) -> Vec<f32> {
@@ -120,7 +213,7 @@ impl NeighborhoodAware {
     // }
     
     fn neighbor_distances(&self, i: usize) -> Vec<f32> {
-        self.data.metadata()[i].1.iter().map(|&(_, d)| d).collect()
+        self.data.metadata()[i].1.iter().filter(|(ind, _)| *ind != i).map(|&(_, d)| d).collect()
     }
 }
 

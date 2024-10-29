@@ -25,3 +25,25 @@ pub fn configure_logger<P: AsRef<std::path::Path>>(log_path: P) -> Result<Logger
 
     Ok(guard)
 }
+
+pub fn normalize_distances(distances: &Vec<f32>) -> Vec<f32>{
+    let mut min = f32::INFINITY;
+    let mut max = f32::NEG_INFINITY;
+    
+    distances.iter().for_each(|&f| {
+        if f < min { min = f }
+        if f > max { max = f }
+    });
+    
+    let diff = (max - min).abs();
+    
+    distances.iter().map(|f| {
+        (f - min) / diff
+    }).collect::<Vec<_>>()
+}
+
+pub fn normalize_distribution(distribution: &Vec<f32>) -> Vec<f32>{
+    let sum: f32 = distribution.iter().sum();
+    
+    distribution.iter().map(|f| f / sum).collect()
+}

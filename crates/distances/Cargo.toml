@@ -25,7 +25,7 @@ libm = { workspace = true }
 symagen = { workspace = true }
 criterion = { version = "0.5.1", features = ["html_reports"] }
 test-case = "3.2.1"
-stringzilla = "3.9.3"
+# stringzilla = "3.9.3"
 
 [[bench]]
 name = "inv-sqrt"
@@ -39,9 +39,9 @@ harness = false
 name = "big-lp"
 harness = false
 
-[[bench]]
-name = "big-strings"
-harness = false
+# [[bench]]
+# name = "big-strings"
+# harness = false
 
 [[bench]]
 name = "needleman-wunsch"

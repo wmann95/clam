@@ -9,3 +9,9 @@ rustflags = [
 
 [env]
 RUST_BACKTRACE = "full"
+
+[source.crates-io]
+replace-with = "vendored-sources"
+
+[source.vendored-sources]
+directory = "./third-party/vendor/"

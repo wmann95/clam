@@ -12,7 +12,7 @@ use super::{Addition, Multiplication};
 
 /// Collections of `Number`s can be used to calculate distances.
 pub trait Number:
-    Addition + Multiplication + PartialEq + Clone + Send + Sync + Debug + Display + Default + FromStr
+    Addition + Multiplication + PartialEq + Clone + Send + Sync + Debug + Display + Default + FromStr + PartialOrd
 {
     /// The maximum possible value.
     const MAX: Self;
