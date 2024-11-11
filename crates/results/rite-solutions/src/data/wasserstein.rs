@@ -7,42 +7,34 @@ use distances::{number::Float, Number};
 /// Uses Euclidean distance as the ground metric.
 ///
 /// See the [SciPy documentation](https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.wasserstein_distance.html) for more information.
-pub fn wasserstein<T: Number, U: Float>(x: &Vec<T>, y: &Vec<T>) -> U {
-    let mut work = U::ZERO;
+pub fn wasserstein<T: Number, U: Float>(u_values: &Vec<T>, v_values: &Vec<T>) -> U {
+    // We assume that both vecs are sorted.
     
-    let mut left = x.iter().map(|f| *f).enumerate().collect::<Vec<(usize, T)>>();
-    let mut right = y.iter().map(|f| *f).enumerate().collect::<Vec<(usize, T)>>();
+    let u_values = u_values.iter().map(|f| U::from(*f)).collect::<Vec<U>>();
+    let v_values = v_values.iter().map(|f| U::from(*f)).collect::<Vec<U>>();
     
-    while let Some((l_index, mut l_val)) = left.pop(){
-        while l_val.as_f64().is_normal() {
-            let (r_index, mut r_val) = match right.pop(){
-              Some(v) => v,
-              None => break
-            };
-            
-            let flow = if l_val <= r_val{
-              let flow = l_val;
-              l_val = T::ZERO;
-              r_val -= flow;
-              
-              if r_val.as_f64().is_normal(){
-                  right.push((r_index, r_val));
-              }
-              
-              flow
-            }
-            else{
-              let flow = r_val;
-              l_val -= flow;
-              
-              flow
-            };
-            
-            work += U::from(flow) * (U::from(l_index) - U::from(r_index)).abs();
-        }
-    }
-                       
-    work
+    let vec_length = u_values.len();
+    
+    // In the original implementation, the vectors are not expected to be sorted.
+    // Instead, the values are taken in as they are, sorted, and their indices of
+    // where they would be in the concatenated, sorted list of all values.
+    // These are already sorted, so their indices will always just be a vec of 0 to the len,
+    // each divided by the len of the array to get the cdf of the index. Each will have the
+    // same result, as they are both sorted, and are both of the same length.
+    let cdf_indices = (0..vec_length)
+        .map(|i| U::from(i) / U::from(vec_length))
+        .collect::<Vec<U>>();
+    
+    
+    u_values.iter()
+        .zip(v_values.iter())
+        // find the absolute difference
+        .map(|(&l, &r)| l.abs_diff(r))
+        .zip(cdf_indices.iter())
+        // multiply against the cdf
+        .map(|(diff, &cdf)| diff * cdf)
+        // find the sum
+        .sum::<U>()
 }
 
 pub fn direct_flow<T: Number, U: Float>(x: &Vec<T>, y: &Vec<T>) -> U {
@@ -78,6 +70,9 @@ mod wasserstein_tests{
 
         let t = std::time::Instant::now();
 
+        dirt.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        holes.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        
         let res: f32 = wasserstein(&dirt, &holes);
 
         let time = t.elapsed().as_secs_f64();

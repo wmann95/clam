@@ -47,14 +47,17 @@ pub enum Algorithm<U: Number> {
 impl<U: Number> Algorithm<U> {
     /// Perform the search using the algorithm.
     pub fn search<I, D: Dataset<I, U>, C: Cluster<I, U, D>>(&self, data: &D, root: &C, query: &I) -> Vec<(usize, U)> {
-        match self {
+        let mut result = match self {
             Self::RnnLinear(radius) => data.rnn(query, *radius),
             Self::KnnLinear(k) => data.knn(query, *k),
             Self::RnnClustered(radius) => rnn_clustered::search(data, root, query, *radius),
             Self::KnnRepeatedRnn(k, max_multiplier) => knn_repeated_rnn::search(data, root, query, *k, *max_multiplier),
             Self::KnnBreadthFirst(k) => knn_breadth_first::search(data, root, query, *k),
             Self::KnnDepthFirst(k) => knn_depth_first::search(data, root, query, *k),
-        }
+        };
+        result.sort_by(|&(_, a), (_, b)| a.partial_cmp(b).unwrap());
+        
+        result
     }
 
     /// Parallel version of the `search` method.
@@ -64,7 +67,7 @@ impl<U: Number> Algorithm<U> {
         root: &C,
         query: &I,
     ) -> Vec<(usize, U)> {
-        match self {
+        let mut result = match self {
             Self::RnnLinear(radius) => data.par_rnn(query, *radius),
             Self::KnnLinear(k) => data.par_knn(query, *k),
             Self::RnnClustered(radius) => rnn_clustered::par_search(data, root, query, *radius),
@@ -73,7 +76,11 @@ impl<U: Number> Algorithm<U> {
             }
             Self::KnnBreadthFirst(k) => knn_breadth_first::par_search(data, root, query, *k),
             Self::KnnDepthFirst(k) => knn_depth_first::par_search(data, root, query, *k),
-        }
+        };
+        
+        result.par_sort_by(|&(_, a), (_, b)| a.partial_cmp(b).unwrap());
+        
+        result
     }
 
     /// Batched version of the `search` method.

@@ -1,7 +1,7 @@
 //! A `Dataset` in which every point stores the distances to its `k` nearest neighbors.
 
 use abd_clam::{
-    cluster::ParCluster, dataset::{metric_space::ParMetricSpace, ParDataset}, utils::mean, Cluster, Dataset, FlatVec, Metric, MetricSpace, Permutable
+    cluster::ParCluster, dataset::{metric_space::ParMetricSpace, ParDataset}, utils::{mean, standard_deviation}, Cluster, Dataset, FlatVec, Metric, MetricSpace, Permutable
 };
 use rayon::prelude::*;
 
@@ -25,13 +25,17 @@ impl NeighborhoodAware {
     /// This will run knn-search on every point in the dataset and store the
     /// results in the dataset.
     pub fn new<C: Cluster<Vec<f32>, f32, Fv>>(data: &Fv, root: &C, k: usize) -> Self {
-        let alg = abd_clam::cakes::Algorithm::KnnLinear(k);
+        let alg = abd_clam::cakes::Algorithm::KnnLinear(k + 1);
 
         let results: Vec<(usize, Vec<(usize, f32)>)> = data
             .instances()
             .iter()
             .enumerate()
-            .map(|(_, query)| alg.search(data, root, query))
+            .map(|(_, query)| {
+                let mut neighbors = alg.search(data, root, query);
+                neighbors.sort_by(|&(_, a),(_, b)|a.partial_cmp(b).unwrap());
+                neighbors
+            })
             .zip(data.metadata().iter())
             .map(|(h, &i)| (i, h))
             .collect();
@@ -45,12 +49,16 @@ impl NeighborhoodAware {
 
     /// Parallel version of `new`.
     pub fn par_new<C: ParCluster<Vec<f32>, f32, Fv>>(data: &Fv, root: &C, k: usize) -> Self {
-        let alg = abd_clam::cakes::Algorithm::KnnLinear(k);
+        let alg = abd_clam::cakes::Algorithm::KnnLinear(k + 1);
 
         let results: Vec<(usize, Vec<(usize, f32)>)> = data
             .instances()
             .par_iter()
-            .map(|query| alg.par_search(data, root, query))
+            .map(|query| {
+                let mut neighbors = alg.par_search(data, root, query);
+                neighbors.par_sort_by(|&(_, a),(_, b)|a.partial_cmp(b).unwrap());
+                neighbors
+            })
             .zip(data.metadata().par_iter())
             .map(|(h, &i)| (i, h))
             .collect();
@@ -64,9 +72,16 @@ impl NeighborhoodAware {
     
     /// Check if a point is an outlier.
     pub fn is_outlier<C: Cluster<Vec<f32>, f32, Self>>(&self, root: &C, query: &Vec<f32>) -> bool {
+        println!();
+        println!("Entering is_outlier.");
+        
         let alg = abd_clam::cakes::Algorithm::KnnLinear(self.k);
         
         let hits = alg.search(self, root, query);
+        
+        println!();
+        println!("Hits: {:?}", hits);
+        
         let neighbors_distances = hits
             .iter()
             .map(|&(i, _)| {
@@ -74,44 +89,69 @@ impl NeighborhoodAware {
             })
             .collect::<Vec<_>>();
         
-        let dist_mat = neighbors_distances.iter().map(|v| {
+        let neighbor_wass_dist_mat = neighbors_distances.iter().map(|v| {
             neighbors_distances.iter().map(|q| wasserstein(v, q)).collect::<Vec<f32>>()
         }).collect::<Vec<Vec<f32>>>();
         
-        for a in &dist_mat{
+        println!("Wasserstein distance matrix of neighbors:");
+        for a in &neighbor_wass_dist_mat{
             println!("{:?}", *a);
         }
         
         let query_distances = hits.iter().map(|&(_, d)| d).collect::<Vec<_>>();
         
-        let wasserstein_distances = neighbors_distances.iter().map(|v|{
+        let query_wass_distances = neighbors_distances.iter().map(|v|{
             wasserstein(&query_distances, v)
         }).collect::<Vec<f32>>();
         
         println!();
-        println!("{:?}", wasserstein_distances);
+        println!("Query wasserstein distances");
+        println!("{:?}", query_wass_distances);
         
-        // TODO: What am I using the dist_mat for? Am I comparing wasserstein_distances to the distances there?
-        //       Am I to find the max of each of the inner arrays, then comparing that to wasserstein_distances?
-        //       What is the intended means to collapse this into a single result? Is it just that if the
-        //       difference between 
         
-        // guessing here
+        /*
+        Now that we have the wasserstein distances, we need to collapse
+        the vectors into some individual score. The way I am choosing to do
+        this is:
+         - find the means of each of the neighbor groups (Collapsing the Vec<Vec<f32>> into a Vec<f32>)
+         - find the standard deviation of the neighbor distances
+         - using this standard deviation, find the average Z-score of the query against the neighbors
+        */
         
-        let max_dist = dist_mat.iter().flatten().fold(f32::NEG_INFINITY, |out, f|{
-            let f = f.clone();
-            if out < f{
-                f
-            }
-            else{
-                out
-            }
-        });
+        let neighbor_means = neighbor_wass_dist_mat.iter()
+            .map(|v: &Vec<f32>|{
+                mean::<f32, f32>(v)
+            })
+            .collect::<Vec<_>>();
         
-        println!("{}", max_dist);
         println!();
+        println!("Neighbor means:");
+        println!("{:?}", neighbor_means);
         
-        wasserstein_distances.iter().filter(|f| **f > max_dist).collect::<Vec<_>>().len() > 0
+        let mean_of_neighbor_means: f32 = mean(&neighbor_means);
+        
+        let neighbor_standard_deviation: f32 = standard_deviation(&neighbor_means);
+        
+        // let mean_squeared_errors = neighbor_means.iter()
+        //     .zip(query_wass_distances.iter())
+        //     .map(|(&u, &x)| (x - u).powi(2))
+        //     .collect::<Vec<_>>();
+        
+        let mean_squeared_errors = query_wass_distances.iter()
+            .map(|&x| (x - mean_of_neighbor_means).powi(2))
+            .collect::<Vec<_>>();
+        
+        println!();
+        println!("Mean squared errors:");
+        println!("{:?}", mean_squeared_errors);
+        
+        let average_mean_squared_error: f32 = mean(&mean_squeared_errors);
+        
+        let sigma_range = 2f32 * neighbor_standard_deviation;
+        
+        println!("Average mean squared error: {average_mean_squared_error}, standard deviation: {neighbor_standard_deviation}");
+        
+        average_mean_squared_error.abs() > sigma_range
     }
 
     /// Get the distances to the `k` nearest neighbors of a point.
@@ -119,8 +159,11 @@ impl NeighborhoodAware {
     //     self.data.metadata()[i].1.iter().map(|&(_, d)| d).collect()
     // }
     
+    /// Get the nearest neighbors not including the queried index.
     fn neighbor_distances(&self, i: usize) -> Vec<f32> {
-        self.data.metadata()[i].1.iter().map(|&(_, d)| d).collect()
+        self.data.metadata()[i].1.iter()
+            .filter(|(ind, _)| *ind != i)
+            .map(|&(_, d)| d).collect()
     }
 }
 
