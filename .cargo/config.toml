@@ -9,3 +9,14 @@ rustflags = [
 
 [env]
 RUST_BACKTRACE = "full"
+
+[source.crates-io]
+replace-with = "vendored-sources"
+
+[source."git+https://github.com/smartcorelib/smartcore.git?rev=239c00428f7448d30b78bf8653923f6bc0e2c29b"]
+git = "https://github.com/smartcorelib/smartcore.git"
+rev = "239c00428f7448d30b78bf8653923f6bc0e2c29b"
+replace-with = "vendored-sources"
+
+[source.vendored-sources]
+directory = "./third-party/vendor"
