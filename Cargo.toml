@@ -4,10 +4,10 @@ members = [
     "crates/distances",
     "crates/symagen",
     "crates/results/chaoda",
-    "crates/results/cakes",
+    # "crates/results/cakes",
     "crates/results/rite-solutions",
-    "pypi/distances",
-    "pypi/results/cakes",
+    # "pypi/distances",
+    # "pypi/results/cakes",
 ]
 resolver = "2"
 
@@ -28,9 +28,9 @@ ordered-float = "4.2"
 flate2 = { version = "1.0", features = ["zlib"] }
 
 # Python wrapper dependencies
-numpy = "0.20.0"
-pyo3 = { version = "0.20", features = ["extension-module", "abi3-py39"] }
-pyo3-ffi = { version = "0.20", features = ["extension-module", "abi3-py39"] }
+# numpy = "0.20.0"
+# pyo3 = { version = "0.20", features = ["extension-module", "abi3-py39"] }
+# pyo3-ffi = { version = "0.20", features = ["extension-module", "abi3-py39"] }
 
 [profile.test]
 opt-level = 3
